@@ -182,7 +182,7 @@ void fireControl() {
     shotsRemaining = shotCount[shotMode];
   }
   
-  if (lastDiscState && (!disclPinState || !discrPinState)) {
+  if (shotsRemaining && lastDiscState && (!disclPinState || !discrPinState)) {
     shotsRemaining--;
   }
   
