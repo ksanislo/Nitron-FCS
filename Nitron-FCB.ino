@@ -1,5 +1,5 @@
 /*
- * Nerf Vortex Nitron - Brushless Fire Control v0.9.0
+ * Nerf Vortex Nitron - Brushless Fire Control v0.9.1
  */
 #include <Servo.h>
 
@@ -22,7 +22,7 @@ const int pusherDiscDelay = 50;     // 0.05 second
 const int debounceDelay = 5;
 
 // Shot queue depth for each mode
-const unsigned int shotCount[] = {1, 3, 65535};
+uint8_t shotCount[] = {1, 3, 255};
 
 // Arduino pin configuration
 const int flywheelRpmPin = 2;
@@ -49,7 +49,7 @@ bool discrPinState = 0;
 bool positionPinState = 0;
 bool triggerPinState = 0;
 bool readyPinState = 0;
-unsigned int shotMode = 1;
+unsigned int shotMode = 0;
 unsigned int shotsRemaining = 0;
 unsigned long flywheelStartTime = 0;
 unsigned long flywheelTimer = 0;
@@ -96,6 +96,7 @@ void loop() {
   pusherControl();
   flywheelControl();
   fireControl();
+  modeSelection();
 
   if (positionPinState) {
     digitalWrite(LED_BUILTIN, HIGH);
@@ -224,4 +225,28 @@ void fireControl() {
   
   lastTriggerPinState = triggerPinState;
   lastpositionPinState = positionPinState;
+}
+
+void modeSelection() {
+  /*
+   * Select fire mode via triggers while disk eject is pulled back.
+   */
+
+  static bool lastTriggerPinState = 0;
+  static bool lastReadyPinState = 0;
+  if (!ejectPinState) {
+    if (triggerPinState && !lastTriggerPinState) {
+      if (shotMode < sizeof(shotCount)-1) {
+        shotMode++;
+      }
+    }
+
+    if (readyPinState && !lastReadyPinState) {
+      if (shotMode > 0) {
+        shotMode--;
+      }
+    }
+  }
+  lastTriggerPinState = triggerPinState;
+  lastReadyPinState = readyPinState;
 }
