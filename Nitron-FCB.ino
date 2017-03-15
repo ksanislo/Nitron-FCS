@@ -1,24 +1,25 @@
 /*
- * Nerf Vortex Nitron - Brushless Fire Control v0.5.0
+ * Nerf Vortex Nitron - Brushless Fire Control v0.9.0
  */
 #include <Servo.h>
 
 // ESC pulse lengths in uS
-const int centeringPulse = 1500;    // init
-const int pusherRunPulse = 2000;    // full
-const int pusherStopPulse = 1000;   // brake
-const int flywheelRunPulse = 2000;  // full
-const int flywheelStopPulse = 1500; // coast
+const int pusherRunPulse = 1590;    // normal run
+const int pusherReturnPulse = 1550; // minimum run
+const int pusherStopPulse = 1000;   // maximum brake
+
+const int flywheelRunPulse = 1650;  // normal run
+const int flywheelStopPulse = 1520; // coast
 
 // Timers for flywheel in mS
-const int flywheelSpoolTime = 500;  // 0.5 seconds
-const int flywheelRunTime = 2500;   // 2.5 seconds
+const int flywheelSpoolTime = 250;  // 0.25 seconds
+const int flywheelRunTime = 250;    // 0.25 seconds
 
 // Time to wait for disc to pop up, in mS
-const int pusherDiscDelay = 100;    // 0.1 second
+const int pusherDiscDelay = 50;     // 0.05 second
 
 // Button debounce timer, in mS
-const int debounceDelay = 10;
+const int debounceDelay = 5;
 
 // Shot queue depth for each mode
 const unsigned int shotCount[] = {1, 3, 65535};
@@ -48,12 +49,13 @@ bool discrPinState = 0;
 bool positionPinState = 0;
 bool triggerPinState = 0;
 bool readyPinState = 0;
-unsigned int shotMode = 0;
+unsigned int shotMode = 1;
 unsigned int shotsRemaining = 0;
 unsigned long flywheelStartTime = 0;
 unsigned long flywheelTimer = 0;
 unsigned long positionPinTimer = 0;
-
+int pusherPulse = 1520;
+int flywheelPulse = 1520;
 
 void setup() {
   /*
@@ -71,9 +73,11 @@ void setup() {
   pinMode(triggerPin, INPUT_PULLUP);
   pinMode(readyPin, INPUT_PULLUP);
   flywheel.attach(flywheelEscPin);
-  flywheel.writeMicroseconds(centeringPulse);
+  flywheel.writeMicroseconds(flywheelPulse);
   pusher.attach(pusherEscPin);
-  pusher.writeMicroseconds(centeringPulse);
+  pusher.writeMicroseconds(pusherPulse);
+
+  pinMode(LED_BUILTIN, OUTPUT);
 }
 
 void loop() {
@@ -81,17 +85,23 @@ void loop() {
    * This is the primary loop.
    */
   
-  magazinePinState = debounceInput(magazinePin);
+  magazinePinState = true; //debounceInput(magazinePin);
   ejectPinState    = debounceInput(ejectPin);
-  disclPinState    = debounceInput(disclPin);
-  discrPinState    = debounceInput(discrPin);
+  disclPinState    = true; //debounceInput(disclPin);
+  discrPinState    = true; //debounceInput(discrPin);
   positionPinState = debounceInput(positionPin);
   triggerPinState  = debounceInput(triggerPin);
   readyPinState    = debounceInput(readyPin);
   
   pusherControl();
   flywheelControl();
-  fireControl();  
+  fireControl();
+
+  if (positionPinState) {
+    digitalWrite(LED_BUILTIN, HIGH);
+  } else {
+    digitalWrite(LED_BUILTIN, LOW);
+  }
 }
 
 bool debounceInput(int pin) {
@@ -129,22 +139,42 @@ void pusherControl() {
    * Failing to chamber a new round in time, disc eject, or magazine removal forces an automatic stop.
    */
   
-  static bool lastPositionPinState = 0;
+  //static bool lastPositionPinState = 0;
   
-  if (positionPinState != lastPositionPinState) {
-    positionPinTimer = millis();
-    lastPositionPinState = positionPinState;
-  }
+  //if (positionPinState != lastPositionPinState) {
+  //  positionPinTimer = millis();
+  //  lastPositionPinState = positionPinState;
+  //}
   
-  // Run the pusher motor.
-  if ((positionPinState || (shotsRemaining && millis() - flywheelStartTime >= flywheelSpoolTime)) && ejectPinState && magazinePinState) {
-    pusher.writeMicroseconds(pusherRunPulse);
+  if (ejectPinState && magazinePinState) {
+    if (positionPinState) {
+      if (shotsRemaining) {
+        if (disclPinState && discrPinState && flywheelStartTime && millis() - flywheelStartTime >= flywheelSpoolTime) {
+          pusherPulse = pusherRunPulse;
+        }
+      } else {
+        pusherPulse = pusherReturnPulse;
+      }
+    } else {
+      if (shotsRemaining) {
+        if (flywheelStartTime && millis() - flywheelStartTime >= flywheelSpoolTime) {
+          if (shotsRemaining == 1 && shotMode >= 1) { // Back off the pusher speed early for the last shot
+            pusherPulse = pusherReturnPulse;
+          } else {
+            pusherPulse = pusherRunPulse;
+          }
+        }
+        if(!disclPinState && !discrPinState) { // Should be OR, and have a delay timer
+          pusherPulse = pusherStopPulse;
+        }
+      } else {
+        pusherPulse = pusherStopPulse;
+      }
+    }
+  } else {
+    pusherPulse = pusherStopPulse;
   }
-  
-  // Brake pusher motor.
-  if (!positionPinState && (!shotsRemaining || ((!disclPinState || !discrPinState) && millis() - positionPinTimer >= pusherDiscDelay)) || !ejectPinState || !magazinePinState) {
-    pusher.writeMicroseconds(pusherStopPulse);
-  }
+  pusher.writeMicroseconds(pusherPulse);
 }
 
 void flywheelControl() {
@@ -154,19 +184,21 @@ void flywheelControl() {
    * Maintain flywheel speed for a minimum run time   
    * Disc eject or magazine removal forces an automatic stop.
    */
-   
+  
   if ((shotsRemaining || readyPinState) && ejectPinState && magazinePinState){
     if (flywheelStartTime == 0) {
       flywheelStartTime = millis(); // Save the initial spool-up time.
     }
     flywheelTimer = millis(); // Reset the timer.
-    flywheel.writeMicroseconds(flywheelRunPulse);
+    flywheelPulse = flywheelRunPulse;
   }
   
   if (millis() - flywheelTimer >= flywheelRunTime || !ejectPinState || !magazinePinState) {
-    flywheel.writeMicroseconds(flywheelStopPulse);
+    flywheelPulse = flywheelStopPulse;
     flywheelStartTime = 0;
   }
+
+  flywheel.writeMicroseconds(flywheelPulse);
 }
 
 void fireControl() {
@@ -176,13 +208,13 @@ void fireControl() {
    */
   
   static bool lastTriggerPinState = 0;
-  static bool lastDiscState = 0;
+  static bool lastpositionPinState = 0;
   
   if (triggerPinState && !lastTriggerPinState && ejectPinState && magazinePinState) {
     shotsRemaining = shotCount[shotMode];
   }
   
-  if (shotsRemaining && lastDiscState && (!disclPinState || !discrPinState)) {
+  if (shotsRemaining && !lastpositionPinState && positionPinState) {
     shotsRemaining--;
   }
   
@@ -191,5 +223,5 @@ void fireControl() {
   }
   
   lastTriggerPinState = triggerPinState;
-  lastDiscState = disclPinState & discrPinState;
+  lastpositionPinState = positionPinState;
 }
