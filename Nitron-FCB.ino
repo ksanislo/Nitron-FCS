@@ -1,5 +1,5 @@
 /*
- * Nerf Vortex Nitron - Brushless Fire Control v0.9.1
+ * Nerf Vortex Nitron - Brushless Fire Control v0.9.2
  */
 #include <Servo.h>
 
@@ -85,10 +85,10 @@ void loop() {
    * This is the primary loop.
    */
   
-  magazinePinState = true; //debounceInput(magazinePin);
+  magazinePinState = debounceInput(magazinePin);
   ejectPinState    = debounceInput(ejectPin);
-  disclPinState    = true; //debounceInput(disclPin);
-  discrPinState    = true; //debounceInput(discrPin);
+  disclPinState    = debounceInput(disclPin);
+  discrPinState    = debounceInput(discrPin);
   positionPinState = debounceInput(positionPin);
   triggerPinState  = debounceInput(triggerPin);
   readyPinState    = debounceInput(readyPin);
