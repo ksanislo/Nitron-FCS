@@ -12,7 +12,7 @@ const int flywheelRunPulse = 1700;  // normal run
 const int flywheelStopPulse = 1520; // coast
 
 // Timers for flywheel in mS
-const int flywheelSpoolTime = 250;  // 0.25 seconds
+const int flywheelSpoolTime = 50;  // 0.05 seconds
 const int flywheelRunTime = 250;    // 0.25 seconds
 
 // Button debounce timer, in mS
