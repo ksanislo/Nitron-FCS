@@ -1,5 +1,5 @@
 /*
- * Nerf Vortex Nitron - Brushless Fire Control v0.9.2
+ * Nerf Vortex Nitron - Brushless Fire Control v0.9.3
  */
 #include <Servo.h>
 
@@ -8,21 +8,18 @@ const int pusherRunPulse = 1590;    // normal run
 const int pusherReturnPulse = 1550; // minimum run
 const int pusherStopPulse = 1000;   // maximum brake
 
-const int flywheelRunPulse = 1650;  // normal run
+const int flywheelRunPulse = 1700;  // normal run
 const int flywheelStopPulse = 1520; // coast
 
 // Timers for flywheel in mS
 const int flywheelSpoolTime = 250;  // 0.25 seconds
 const int flywheelRunTime = 250;    // 0.25 seconds
 
-// Time to wait for disc to pop up, in mS
-const int pusherDiscDelay = 50;     // 0.05 second
-
 // Button debounce timer, in mS
 const int debounceDelay = 5;
 
 // Shot queue depth for each mode
-uint8_t shotCount[] = {1, 3, 255};
+const uint8_t shotCount[] = {1, 3, 255};
 
 // Arduino pin configuration
 const int flywheelRpmPin = 2;
@@ -53,7 +50,6 @@ unsigned int shotMode = 0;
 unsigned int shotsRemaining = 0;
 unsigned long flywheelStartTime = 0;
 unsigned long flywheelTimer = 0;
-unsigned long positionPinTimer = 0;
 int pusherPulse = 1520;
 int flywheelPulse = 1520;
 
@@ -139,14 +135,7 @@ void pusherControl() {
    * 
    * Failing to chamber a new round in time, disc eject, or magazine removal forces an automatic stop.
    */
-  
-  //static bool lastPositionPinState = 0;
-  
-  //if (positionPinState != lastPositionPinState) {
-  //  positionPinTimer = millis();
-  //  lastPositionPinState = positionPinState;
-  //}
-  
+
   if (ejectPinState && magazinePinState) {
     if (positionPinState) {
       if (shotsRemaining) {
@@ -165,6 +154,7 @@ void pusherControl() {
             pusherPulse = pusherRunPulse;
           }
         }
+        
         if(!disclPinState && !discrPinState) { // Should be OR, and have a delay timer
           pusherPulse = pusherStopPulse;
         }
@@ -175,6 +165,7 @@ void pusherControl() {
   } else {
     pusherPulse = pusherStopPulse;
   }
+  
   pusher.writeMicroseconds(pusherPulse);
 }
 
@@ -234,6 +225,7 @@ void modeSelection() {
 
   static bool lastTriggerPinState = 0;
   static bool lastReadyPinState = 0;
+  
   if (!ejectPinState) {
     if (triggerPinState && !lastTriggerPinState) {
       if (shotMode < sizeof(shotCount)-1) {
@@ -247,6 +239,7 @@ void modeSelection() {
       }
     }
   }
+  
   lastTriggerPinState = triggerPinState;
   lastReadyPinState = readyPinState;
 }
